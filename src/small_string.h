@@ -73,7 +73,7 @@ class SmallString {
 
   size_t cap() const { return cap_; }
 
-  char operator[](size_t pos) const { return ptr_[pos]; }
+  char& operator[](size_t pos) const { return ptr_[pos]; }
 
   StringPiece str() const { return StringPiece(ptr_, len_); }
 

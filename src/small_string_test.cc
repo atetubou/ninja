@@ -28,6 +28,9 @@ TEST(SmallStringTest, Grow) {
     EXPECT_EQ(len0.size(), 1);
     EXPECT_EQ(len0, "a");
     EXPECT_FALSE(len0.empty());
+
+    len0[0] = 'b';
+    EXPECT_EQ(len0, "b");
   }
 
   {
@@ -42,6 +45,9 @@ TEST(SmallStringTest, Grow) {
     EXPECT_EQ(len1.size(), 1);
     EXPECT_EQ(len1, "a");
     EXPECT_FALSE(len1.empty());
+
+    len1[0] = 'b';
+    EXPECT_EQ(len1, "b");
   }
 
   {
@@ -56,5 +62,8 @@ TEST(SmallStringTest, Grow) {
     EXPECT_EQ(len128.size(), 1);
     EXPECT_EQ(len128, "a");
     EXPECT_FALSE(len128.empty());
+
+    len128[0] = 'b';
+    EXPECT_EQ(len128, "b");
   }
 }
