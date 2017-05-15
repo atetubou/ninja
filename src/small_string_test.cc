@@ -22,10 +22,12 @@ TEST(SmallStringTest, Grow) {
     EXPECT_FALSE(len0.is_small());
     EXPECT_EQ(len0.size(), 0);
     EXPECT_EQ(len0, "");
+    EXPECT_TRUE(len0.empty());
 
     len0.append("a");
     EXPECT_EQ(len0.size(), 1);
     EXPECT_EQ(len0, "a");
+    EXPECT_FALSE(len0.empty());
   }
 
   {
@@ -33,11 +35,13 @@ TEST(SmallStringTest, Grow) {
     EXPECT_TRUE(len1.is_small());
     EXPECT_EQ(len1.size(), 0);
     EXPECT_EQ(len1, "");
+    EXPECT_TRUE(len1.empty());
 
     len1.append("a");
     EXPECT_FALSE(len1.is_small());
     EXPECT_EQ(len1.size(), 1);
     EXPECT_EQ(len1, "a");
+    EXPECT_FALSE(len1.empty());
   }
 
   {
@@ -45,10 +49,12 @@ TEST(SmallStringTest, Grow) {
     EXPECT_TRUE(len128.is_small());
     EXPECT_EQ(len128.size(), 0);
     EXPECT_EQ(len128, "");
+    EXPECT_TRUE(len128.empty());
 
     len128.append("a");
     EXPECT_TRUE(len128.is_small());
     EXPECT_EQ(len128.size(), 1);
     EXPECT_EQ(len128, "a");
+    EXPECT_FALSE(len128.empty());
   }
 }

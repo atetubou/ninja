@@ -80,6 +80,10 @@ class SmallString {
   bool operator==(const StringPiece& other) const { return str() == other; }
 
   bool is_small() const { return ptr_ == stack_buffer_; }
+
+  bool empty() const {
+    return len_ == 0;
+  }
 };
 
 #endif  // NINJA_SMALL_STRING_H_
