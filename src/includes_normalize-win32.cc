@@ -106,19 +106,19 @@ bool IsFullPathName(StringPiece s) {
 }  // anonymous namespace
 
 IncludesNormalize::IncludesNormalize(const string& relative_to) {
-  relative_to_ = AbsPath(relative_to);
-  split_relative_to_ = SplitStringPiece(relative_to_, '/');
+  relative_to_.append(relative_to);
+  AbsPath(&relative_to_);
+  split_relative_to_ = SplitStringPiece(relative_to_.str(), '/');
 }
 
-string IncludesNormalize::AbsPath(StringPiece s) {
-  if (IsFullPathName(s)) {
-    string result = s.AsString();
-    for (size_t i = 0; i < result.size(); ++i) {
-      if (result[i] == '\\') {
-        result[i] = '/';
+void IncludesNormalize::AbsPath(SmallPath* s) {
+  if (IsFullPathName(s->str())) {
+    for (size_t i = 0; i < s->size(); ++i) {
+      if ((*s)[i] == '\\') {
+        (*s)[i] = '/';
       }
     }
-    return result;
+    return;
   }
 
   char result[_MAX_PATH];
@@ -126,13 +126,14 @@ string IncludesNormalize::AbsPath(StringPiece s) {
   for (char* c = result; *c; ++c)
     if (*c == '\\')
       *c = '/';
-  return result;
+  s->clear();
+  s->append(result);
 }
 
 string IncludesNormalize::Relativize(
-    StringPiece path, const vector<StringPiece>& start_list) {
-  string abs_path = AbsPath(path);
-  vector<StringPiece> path_list = SplitStringPiece(abs_path, '/');
+    SmallPath* path, const vector<StringPiece>& start_list) {
+  AbsPath(path);
+  vector<StringPiece> path_list = SplitStringPiece(path, '/');
   int i;
   for (i = 0; i < static_cast<int>(min(start_list.size(), path_list.size()));
        ++i) {
@@ -141,15 +142,18 @@ string IncludesNormalize::Relativize(
     }
   }
 
-  vector<StringPiece> rel_list;
-  rel_list.reserve(start_list.size() - i + path_list.size() - i);
-  for (int j = 0; j < static_cast<int>(start_list.size() - i); ++j)
-    rel_list.push_back("..");
-  for (int j = i; j < static_cast<int>(path_list.size()); ++j)
-    rel_list.push_back(path_list[j]);
-  if (rel_list.size() == 0)
+  SmallPath ret;
+  for (int j = 0; j < static_cast<int>(start_list.size() - i); ++j) {
+    ret.append("..");
+    ret.append("/");
+  }
+  for (int j = i; j < static_cast<int>(path_list.size()); ++j) {
+    ret.append(path_list[j]);
+    ret.append("/");
+  }
+  if (ret.empty())
     return ".";
-  return JoinStringPiece(rel_list, '/');
+  return string(ret.c_str(), ret.size() - 1);
 }
 
 bool IncludesNormalize::Normalize(const string& input,
@@ -165,12 +169,15 @@ bool IncludesNormalize::Normalize(const string& input,
   if (!CanonicalizePath(copy, &len, &slash_bits, err))
     return false;
   StringPiece partially_fixed(copy, len);
-  string abs_input = AbsPath(partially_fixed);
+  SmallPath abs_input;
+  abs_input.append(paritally_fixed);
 
-  if (!SameDrive(abs_input, relative_to_)) {
+  AbsPath(&abs_input);
+
+  if (!SameDrive(abs_input.str(), relative_to_)) {
     *result = partially_fixed.AsString();
     return true;
   }
-  *result = Relativize(abs_input, split_relative_to_);
+  *result = Relativize(&abs_input, split_relative_to_);
   return true;
 }

@@ -14,9 +14,14 @@
 
 #include <string>
 #include <vector>
+
+#include "small_string.h"
+
 using namespace std;
 
 struct StringPiece;
+
+typedef SmallString<1024> SmallPath;
 
 /// Utility functions for normalizing include paths on Windows.
 /// TODO: this likely duplicates functionality of CanonicalizePath; refactor.
@@ -25,15 +30,15 @@ struct IncludesNormalize {
   IncludesNormalize(const string& relative_to);
 
   // Internal utilities made available for testing, maybe useful otherwise.
-  static string AbsPath(StringPiece s);
-  static string Relativize(StringPiece path,
-                           const vector<StringPiece>& start_list);
+  static void AbsPath(SmallPath* s);
+  static void Relativize(const SmallPath& path,
+                         const vector<StringPiece>& start_list);
 
   /// Normalize by fixing slashes style, fixing redundant .. and . and makes the
   /// path |input| relative to |this->relative_to_| and store to |result|.
   bool Normalize(const string& input, string* result, string* err) const;
 
  private:
-  string relative_to_;
+  SmallPath relative_to_;
   vector<StringPiece> split_relative_to_;
 };

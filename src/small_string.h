@@ -84,6 +84,11 @@ class SmallString {
   bool empty() const {
     return len_ == 0;
   }
+
+  void clear() {
+    len_ = 0;
+    ptr_[len_] = '\0';
+  }
 };
 
 #endif  // NINJA_SMALL_STRING_H_
