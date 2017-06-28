@@ -578,6 +578,7 @@ for name in ['build_log_perftest',
              'depfile_parser_perftest',
              'hash_collision_bench',
              'manifest_parser_perftest',
+             'subprocess_perftest',
              'clparser_perftest']:
   objs = cxx(name)
   all_targets += n.build(binary(name), 'link', objs,
