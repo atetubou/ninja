@@ -58,7 +58,7 @@ int main(int argc, char* argv[]) {
     if (end - start > 2000) {
       int delta_ms = (int)(end - start);
       printf("Output of `%s`: %s", kSimpleCommand, subprocesses[0]->GetOutput().c_str());
-      printf("Parse %d times in %dms avg %.1fus\n",
+      printf("Run subprocess %d times in %dms avg %.1fus\n",
              limit, delta_ms, float(delta_ms * 1000) / limit);
       break;
     }
