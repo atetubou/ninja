@@ -320,6 +320,8 @@ if platform.is_msvc():
               '/wd4267',
               '/DNOMINMAX', '/D_CRT_SECURE_NO_WARNINGS',
               '/D_HAS_EXCEPTIONS=0',
+              # UNICODE macro for explicit use of ANSI windows api.
+              '/DUNICODE',
               '/DNINJA_PYTHON="%s"' % options.with_python]
     if platform.msvc_needs_fs():
         cflags.append('/FS')
