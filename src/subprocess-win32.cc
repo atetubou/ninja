@@ -19,9 +19,19 @@
 
 #include <algorithm>
 
+#include <process.h>
+
 #include "util.h"
 
-Subprocess::Subprocess(bool use_console) : child_(NULL) , overlapped_(),
+namespace {
+
+HANDLE gCreateProcessSemaphore = NULL;
+const int MAX_SEM_COUNT = 10;
+
+}
+
+Subprocess::Subprocess(bool use_console) : child_(NULL), thread_(NULL),
+                                           overlapped_(),
                                            is_reading_(false),
                                            use_console_(use_console) {
 }
@@ -72,9 +82,28 @@ HANDLE Subprocess::SetupPipe(HANDLE ioport) {
   return output_write_child;
 }
 
-bool Subprocess::Start(SubprocessSet* set, const string& command) {
-  HANDLE child_pipe = SetupPipe(set->ioport_);
+static unsigned int _stdcall ThreadFunc(LPVOID lpParameter) {
+  ((Subprocess*)lpParameter)->ExecThread();
+  return 0;
+}
 
+bool Subprocess::Start(SubprocessSet* set, const string& command) {
+  child_pipe_ = SetupPipe(set->ioport_);
+  command_ = command;
+
+  if (use_console_) {
+    return ExecThread();
+  }
+
+  thread_ = (HANDLE)_beginthreadex(NULL, 0, ThreadFunc, (LPVOID)this, 0, NULL);
+
+  if (thread_ == NULL)
+    Win32Fatal("_beginthreadex");
+
+  return true;
+}
+
+bool Subprocess::ExecThread() {
   SECURITY_ATTRIBUTES security_attributes;
   memset(&security_attributes, 0, sizeof(SECURITY_ATTRIBUTES));
   security_attributes.nLength = sizeof(SECURITY_ATTRIBUTES);
@@ -86,15 +115,40 @@ bool Subprocess::Start(SubprocessSet* set, const string& command) {
   if (nul == INVALID_HANDLE_VALUE)
     Fatal("couldn't open nul");
 
-  STARTUPINFOA startup_info;
+  STARTUPINFOEXA startup_info;
   memset(&startup_info, 0, sizeof(startup_info));
-  startup_info.cb = sizeof(STARTUPINFO);
+  startup_info.StartupInfo.cb = sizeof(startup_info);
   if (!use_console_) {
-    startup_info.dwFlags = STARTF_USESTDHANDLES;
-    startup_info.hStdInput = nul;
-    startup_info.hStdOutput = child_pipe;
-    startup_info.hStdError = child_pipe;
+    startup_info.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    startup_info.StartupInfo.hStdInput = nul;
+    startup_info.StartupInfo.hStdOutput = child_pipe_;
+    startup_info.StartupInfo.hStdError = child_pipe_;
   }
+
+  // Make only child_pipe_ and nul HANDLE inheritable to child process
+  // in multi threaded process creation.
+  SIZE_T list_size = 0;
+  if (!InitializeProcThreadAttributeList(NULL, 1, 0, &list_size) &&
+      GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
+    Win32Fatal("InitializeProcThreadAttributeList getsize");
+  }
+
+  std::vector<char> attr_buf(list_size);
+  LPPROC_THREAD_ATTRIBUTE_LIST attr_list = (LPPROC_THREAD_ATTRIBUTE_LIST)(attr_buf.data());
+  if (!InitializeProcThreadAttributeList(attr_list, 1, 0, &list_size)) {
+   Win32Fatal("InitializeProcThreadAttributeList setsize");
+  }
+
+  HANDLE inherit_list[] = {child_pipe_, nul};
+
+  if (!UpdateProcThreadAttribute(attr_list, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+                                 inherit_list, sizeof(inherit_list),
+                                 NULL, NULL)) {
+    Win32Fatal("UpdateProcThreadAttribute");
+  }
+
+  startup_info.lpAttributeList = attr_list;
+
   // In the console case, child_pipe is still inherited by the child and closed
   // when the subprocess finishes, which then notifies ninja.
 
@@ -103,34 +157,47 @@ bool Subprocess::Start(SubprocessSet* set, const string& command) {
 
   // Ninja handles ctrl-c, except for subprocesses in console pools.
   DWORD process_flags = use_console_ ? 0 : CREATE_NEW_PROCESS_GROUP;
+  process_flags |= EXTENDED_STARTUPINFO_PRESENT;
+
+  // restrict the number of cuncurrent CreateProcess.
+  WaitForSingleObject(gCreateProcessSemaphore, INFINITE);
 
   // Do not prepend 'cmd /c' on Windows, this breaks command
   // lines greater than 8,191 chars.
-  if (!CreateProcessA(NULL, (char*)command.c_str(), NULL, NULL,
+  if (!CreateProcessA(NULL, (char*)command_.c_str(), NULL, NULL,
                       /* inherit handles */ TRUE, process_flags,
                       NULL, NULL,
-                      &startup_info, &process_info)) {
+                      (STARTUPINFO*)&startup_info, &process_info)) {
     DWORD error = GetLastError();
     if (error == ERROR_FILE_NOT_FOUND) {
       // File (program) not found error is treated as a normal build
       // action failure.
-      if (child_pipe)
-        CloseHandle(child_pipe);
+      if (child_pipe_)
+        CloseHandle(child_pipe_);
       CloseHandle(pipe_);
       CloseHandle(nul);
+      DeleteProcThreadAttributeList(attr_list);
+
+      ReleaseSemaphore(gCreateProcessSemaphore, 1, NULL);
+
       pipe_ = NULL;
       // child_ is already NULL;
       buf_ = "CreateProcess failed: The system cannot find the file "
           "specified.\n";
       return true;
+    } else if (error == ERROR_NOT_ENOUGH_MEMORY) {
+      Win32Fatal("CreateProcess, You need to specify lower -j.");
     } else {
       Win32Fatal("CreateProcess");    // pass all other errors to Win32Fatal
     }
   }
 
+  ReleaseSemaphore(gCreateProcessSemaphore, 1, NULL);
+  DeleteProcThreadAttributeList(attr_list);
+
   // Close pipe channel only used by the child.
-  if (child_pipe)
-    CloseHandle(child_pipe);
+  if (child_pipe_)
+    CloseHandle(child_pipe_);
   CloseHandle(nul);
 
   CloseHandle(process_info.hThread);
@@ -175,6 +242,11 @@ ExitStatus Subprocess::Finish() {
     return ExitFailure;
 
   // TODO: add error handling for all of these.
+  if (thread_ != NULL) {
+    WaitForSingleObject(thread_, INFINITE);
+    CloseHandle(thread_);
+    thread_ = NULL;
+  }
   WaitForSingleObject(child_, INFINITE);
 
   DWORD exit_code = 0;
@@ -204,6 +276,12 @@ SubprocessSet::SubprocessSet() {
     Win32Fatal("CreateIoCompletionPort");
   if (!SetConsoleCtrlHandler(NotifyInterrupted, TRUE))
     Win32Fatal("SetConsoleCtrlHandler");
+
+  gCreateProcessSemaphore = CreateSemaphore(
+      NULL, MAX_SEM_COUNT, MAX_SEM_COUNT, NULL);
+  if (gCreateProcessSemaphore == NULL) {
+    Win32Fatal("CreateSemaphore");
+  }
 }
 
 SubprocessSet::~SubprocessSet() {
@@ -211,6 +289,7 @@ SubprocessSet::~SubprocessSet() {
 
   SetConsoleCtrlHandler(NotifyInterrupted, FALSE);
   CloseHandle(ioport_);
+  CloseHandle(gCreateProcessSemaphore);
 }
 
 BOOL WINAPI SubprocessSet::NotifyInterrupted(DWORD dwCtrlType) {
@@ -229,10 +308,7 @@ Subprocess *SubprocessSet::Add(const string& command, bool use_console) {
     delete subprocess;
     return 0;
   }
-  if (subprocess->child_)
-    running_.push_back(subprocess);
-  else
-    finished_.push(subprocess);
+  running_.push_back(subprocess);
   return subprocess;
 }
 
