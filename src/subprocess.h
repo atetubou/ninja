@@ -51,6 +51,10 @@ struct Subprocess {
 
   const string& GetOutput() const;
 
+#ifdef _WIN32
+  bool ExecThread();
+#endif
+
  private:
   Subprocess(bool use_console);
   bool Start(struct SubprocessSet* set, const string& command);
@@ -65,9 +69,13 @@ struct Subprocess {
 
   HANDLE child_;
   HANDLE pipe_;
+  HANDLE thread_;
+  HANDLE child_pipe_;
   OVERLAPPED overlapped_;
   char overlapped_buf_[4 << 10];
   bool is_reading_;
+  string command_;
+
 #else
   int fd_;
   pid_t pid_;
