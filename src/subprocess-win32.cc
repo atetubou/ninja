@@ -26,7 +26,7 @@
 namespace {
 
 HANDLE gCreateProcessSemaphore = NULL;
-const int MAX_SEM_COUNT = 100;
+const int MAX_SEM_COUNT = 10;
 
 }
 
