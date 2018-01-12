@@ -748,6 +748,7 @@ bool Builder::StartEdge(Edge* edge, string* err) {
   // XXX: this may also block; do we care?
   string rspfile = edge->GetUnescapedRspfile();
   if (!rspfile.empty()) {
+    METRIC_RECORD("WriteRSP");
     string content = edge->GetBinding("rspfile_content");
     if (!disk_interface_->WriteFile(rspfile, content))
       return false;
@@ -854,10 +855,13 @@ bool Builder::FinishCommand(CommandRunner::Result* result, string* err) {
 
   // Delete any left over response file.
   string rspfile = edge->GetUnescapedRspfile();
-  if (!rspfile.empty() && !g_keep_rsp)
+  if (!rspfile.empty() && !g_keep_rsp) {
+    METRIC_RECORD("RemoveRSP");
     disk_interface_->RemoveFile(rspfile);
+  }
 
   if (scan_.build_log()) {
+    METRIC_RECORD("RecordCommand");
     if (!scan_.build_log()->RecordCommand(edge, start_time, end_time,
                                           output_mtime)) {
       *err = string("Error writing to build log: ") + strerror(errno);

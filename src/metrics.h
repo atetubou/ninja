@@ -82,10 +82,12 @@ struct Stopwatch {
 
 /// The primary interface to metrics.  Use METRIC_RECORD("foobar") at the top
 /// of a function to get timing stats recorded for each call of the function.
+#define CAT_CAT(a, b) a ## b
+#define CAT(a, b) CAT_CAT(a, b)
 #define METRIC_RECORD(name)                                             \
-  static Metric* metrics_h_metric =                                     \
+  static Metric* CAT(metrics_h_metric, __LINE__) =                  \
       g_metrics ? g_metrics->NewMetric(name) : NULL;                    \
-  ScopedMetric metrics_h_scoped(metrics_h_metric);
+  ScopedMetric CAT(metrics_h_scoped, __LINE__)(CAT(metrics_h_metric, __LINE__));
 
 extern Metrics* g_metrics;
 
