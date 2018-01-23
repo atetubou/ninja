@@ -757,15 +757,16 @@ bool Builder::FinishCommand(CommandRunner::Result* result, string* err) {
   string deps_type = edge->GetBinding("deps");
   const string deps_prefix = edge->GetBinding("msvc_deps_prefix");
   if (!deps_type.empty()) {
-    string extract_err;
-    if (!ExtractDeps(result, deps_type, deps_prefix, &deps_nodes,
-                     &extract_err) &&
-        result->success()) {
-      if (!result->output.empty())
-        result->output.append("\n");
-      result->output.append(extract_err);
-      result->status = ExitFailure;
-    }
+    result->output.clear();
+    // string extract_err;
+    // if (!ExtractDeps(result, deps_type, deps_prefix, &deps_nodes,
+    //                  &extract_err) &&
+    //     result->success()) {
+    //   if (!result->output.empty())
+    //     result->output.append("\n");
+    //   result->output.append(extract_err);
+    //   result->status = ExitFailure;
+    // }
   }
 
   int start_time, end_time;
