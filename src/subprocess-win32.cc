@@ -20,6 +20,7 @@
 #include <algorithm>
 
 #include <process.h>
+// #include <Threadpoolapiset.h>
 
 #include "util.h"
 
@@ -30,7 +31,8 @@ const int MAX_SEM_COUNT = 100;
 
 }
 
-Subprocess::Subprocess(bool use_console) : child_(NULL), thread_(NULL),
+Subprocess::Subprocess(bool use_console) : child_(NULL), //thread_(NULL),
+                                           work_(NULL),
                                            overlapped_(),
                                            is_reading_(false),
                                            use_console_(use_console) {
@@ -82,9 +84,13 @@ HANDLE Subprocess::SetupPipe(HANDLE ioport) {
   return output_write_child;
 }
 
-static unsigned int _stdcall ThreadFunc(LPVOID lpParameter) {
-  ((Subprocess*)lpParameter)->ExecThread();
-  return 0;
+// static unsigned int _stdcall ThreadFunc(LPVOID lpParameter) {
+//   ((Subprocess*)lpParameter)->ExecThread();
+//   return 0;
+// }
+
+static VOID CALLBACK WorkCallback(PTP_CALLBACK_INSTANCE Instance, PVOID Parameter, PTP_WORK Work) {
+  ((Subprocess*)Parameter)->ExecThread();
 }
 
 bool Subprocess::Start(SubprocessSet* set, const string& command) {
@@ -95,10 +101,16 @@ bool Subprocess::Start(SubprocessSet* set, const string& command) {
     return ExecThread();
   }
 
-  thread_ = (HANDLE)_beginthreadex(NULL, 0, ThreadFunc, (LPVOID)this, 0, NULL);
+  // thread_ = (HANDLE)_beginthreadex(NULL, 0, ThreadFunc, (LPVOID)this, 0, NULL);
 
-  if (thread_ == NULL)
-    Win32Fatal("_beginthreadex");
+  // if (thread_ == NULL)
+  //   Win32Fatal("_beginthreadex");
+
+  work_ = CreateThreadpoolWork(WorkCallback, (PVOID)this, NULL);
+  if (work_ == NULL)
+    Win32Fatal("CreateThreadpoolWork");
+
+  SubmitThreadpoolWork(work_);
 
   return true;
 }
@@ -242,11 +254,18 @@ ExitStatus Subprocess::Finish() {
     return ExitFailure;
 
   // TODO: add error handling for all of these.
-  if (thread_ != NULL) {
-    WaitForSingleObject(thread_, INFINITE);
-    CloseHandle(thread_);
-    thread_ = NULL;
+  // if (thread_ != NULL) {
+  //   WaitForSingleObject(thread_, INFINITE);
+  //   CloseHandle(thread_);
+  //   thread_ = NULL;
+  // }
+
+  if (work_ != NULL) {
+    WaitForThreadpoolWorkCallbacks(work_, FALSE);
+    CloseThreadpoolWork(work_);
+    work_ = NULL;
   }
+
   WaitForSingleObject(child_, INFINITE);
 
   DWORD exit_code = 0;

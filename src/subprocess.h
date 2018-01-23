@@ -69,7 +69,8 @@ struct Subprocess {
 
   HANDLE child_;
   HANDLE pipe_;
-  HANDLE thread_;
+  // HANDLE thread_;
+  PTP_WORK work_;
   HANDLE child_pipe_;
   OVERLAPPED overlapped_;
   char overlapped_buf_[4 << 10];
